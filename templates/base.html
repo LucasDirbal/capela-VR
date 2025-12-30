@@ -1,20 +1,31 @@
-
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Capela</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <title>Capela VR</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<header>📿 Sistema de Capela</header>
-<nav>
-    <a href="/">Agenda</a>
-    <a href="/pessoas">Pessoas</a>
-    <a href="/cadastrar">Cadastrar</a>
-    <a href="/gerar">Gerar Agenda</a>
-</nav>
-<main>
-    {% block content %}{% endblock %}
-</main>
+    <header>Capela VR - Escala</header>
+    <nav>
+        <div style="display: flex; justify-content: space-between; max-width: 950px; margin: auto;">
+            <div>
+                <a href="/">📅 Agenda</a>
+                {% if session.get('role') == 'admin' %}
+                    <a href="/pessoas">👥 Pessoas</a>
+                {% endif %}
+            </div>
+            <div>
+                {% if session.get('nome') %}
+                    <span>Olá, <b>{{ session['nome']|capitalize }}</b></span>
+                    <a href="/logout" style="color: red; margin-left: 10px;">Sair</a>
+                {% else %}
+                    <a href="/login">Entrar</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
 </body>
 </html>

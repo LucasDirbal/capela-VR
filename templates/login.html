@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width: 320px; margin: 50px auto; text-align: center;">
+    <h2>Acesso ao Sistema</h2>
+    <form method="post">
+        <input type="text" name="nome" placeholder="Nome de usuário" required style="width: 100%; margin-bottom: 10px;"><br>
+        <input type="password" name="senha" placeholder="Senha" required style="width: 100%; margin-bottom: 20px;"><br>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">Entrar</button>
+    </form>
+</div>
+{% endblock %}

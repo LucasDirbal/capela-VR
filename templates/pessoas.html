@@ -1,10 +1,39 @@
-
 {% extends "base.html" %}
 {% block content %}
-<h2>Pessoas</h2>
-<ul>
-{% for p in pessoas %}
-    <li>{{ p[1] }} (ordem {{ p[2] }})</li>
-{% endfor %}
-</ul>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <h2>Equipe / Ordem da Escala</h2>
+    <a href="/cadastrar" style="background: #28a745; color: white; padding: 10px; text-decoration: none; border-radius: 5px;">+ Adicionar Pessoa</a>
+</div>
+
+<table border="1" style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+    <thead>
+        <tr style="background: #f4f4f4;">
+            <th>Ordem</th>
+            <th>Nome</th>
+            <th>Mudar Posição</th>
+            <th>Ação</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for p in pessoas %}
+        <tr>
+            <td align="center">{{ p['ordem'] }}</td>
+            <td>{{ p['nome'] }}</td>
+            <td align="center">
+                <a href="/mover_pessoa/{{ p['id'] }}/subir" style="text-decoration: none; font-size: 20px;">⬆️</a>
+                <a href="/mover_pessoa/{{ p['id'] }}/descer" style="text-decoration: none; font-size: 20px;">⬇️</a>
+            </td>
+            <td align="center">
+                <a href="/remover_pessoa/{{ p['id'] }}" 
+                   onclick="return confirm('Deseja mesmo remover {{ p['nome'] }}? Isso afetará a agenda.')" 
+                   style="color: red; text-decoration: none; font-weight: bold;">[ Excluir ]</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p style="margin-top: 20px; color: #666;">
+    <i>Dica: Após alterar a ordem ou remover alguém, clique em <b>"Gerar Nova Agenda"</b> na tela inicial para atualizar a escala de 90 dias.</i>
+</p>
 {% endblock %}

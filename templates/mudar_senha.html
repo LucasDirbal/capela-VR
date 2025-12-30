@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width: 300px; margin: auto; padding-top: 50px;">
+    <h2>Olá, {{ nome }}</h2>
+    <p>Este é seu primeiro acesso. Por favor, escolha uma nova senha:</p>
+    <form action="/mudar_senha" method="post">
+        <input type="password" name="nova_senha" placeholder="Nova Senha" required style="width: 100%; margin-bottom: 15px;">
+        <button type="submit" class="btn btn-success" style="width: 100%;">Salvar Nova Senha</button>
+    </form>
+</div>
+{% endblock %}

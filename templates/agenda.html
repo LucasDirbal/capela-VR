@@ -1,29 +1,31 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Agenda</h2>
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <h2>Agenda de Escala</h2>
+    {% if session['role'] == 'admin' %}
+    <a href="/gerar" class="btn btn-primary">Gerar Nova Agenda</a>
+    {% endif %}
+</div>
+
 <table>
     <tr>
         <th>Data</th>
         <th>Pessoa</th>
-        <th>Atraso</th>
         <th>Ação</th>
     </tr>
     {% for a in agenda %}
-    <tr>
-        <td>{{ a[1] }}</td>
-        <td>{{ a[2] }}</td>
+    <tr {% if a['data'] == hoje %} style="background: #fff9c4;" {% endif %}>
+        <td>{{ a['data_br'] }}</td>
+        <td>{{ a['nome'] }}</td>
         <td>
-            {% if a[1] == hoje %}
+            {% if a['data'] == hoje and session['role'] == 'admin' %}
             <form method="post" action="/atrasar">
-                <input type="number" name="dias" min="1" required>
-                <button>Atrasar</button>
+                <input type="number" name="dias" value="1" min="1" style="width: 40px;">
+                <button type="submit">Atrasar</button>
             </form>
-            {% else %}
-            —
-            {% endif %}
+            {% else %} — {% endif %}
         </td>
     </tr>
     {% endfor %}
-
 </table>
 {% endblock %}
