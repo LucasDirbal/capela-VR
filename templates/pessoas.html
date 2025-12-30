@@ -1,0 +1,10 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h2>Pessoas</h2>
+<ul>
+{% for p in pessoas %}
+<li>{{ p[1] }} (ordem {{ p[2] }})</li>
+{% endfor %}
+</ul>
+{% endblock %}

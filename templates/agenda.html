@@ -1,0 +1,10 @@
+
+{% extends "base.html" %}
+{% block content %}
+<h2>Agenda da Capela</h2>
+<ul>
+{% for a in agenda %}
+<li>{{ a[0] }} - {{ a[1] }}</li>
+{% endfor %}
+</ul>
+{% endblock %}
