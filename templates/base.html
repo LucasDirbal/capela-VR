@@ -6,13 +6,15 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<header>📿 Sistema de Capela</header>
 <nav>
-<a href="/">Agenda</a>
-<a href="/pessoas">Pessoas</a>
-<a href="/cadastrar">Cadastrar</a>
-<a href="/gerar_agenda">Gerar Agenda</a>
+    <a href="/">Agenda</a>
+    <a href="/pessoas">Pessoas</a>
+    <a href="/cadastrar">Cadastrar</a>
+    <a href="/gerar">Gerar Agenda</a>
 </nav>
-<hr>
-{% block content %}{% endblock %}
+<main>
+    {% block content %}{% endblock %}
+</main>
 </body>
 </html>

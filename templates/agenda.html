@@ -1,10 +1,29 @@
-
 {% extends "base.html" %}
 {% block content %}
-<h2>Agenda da Capela</h2>
-<ul>
-{% for a in agenda %}
-<li>{{ a[0] }} - {{ a[1] }}</li>
-{% endfor %}
-</ul>
+<h2>Agenda</h2>
+<table>
+    <tr>
+        <th>Data</th>
+        <th>Pessoa</th>
+        <th>Atraso</th>
+        <th>Ação</th>
+    </tr>
+    {% for a in agenda %}
+    <tr>
+        <td>{{ a[1] }}</td>
+        <td>{{ a[2] }}</td>
+        <td>
+            {% if a[1] == hoje %}
+            <form method="post" action="/atrasar">
+                <input type="number" name="dias" min="1" required>
+                <button>Atrasar</button>
+            </form>
+            {% else %}
+            —
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+
+</table>
 {% endblock %}
