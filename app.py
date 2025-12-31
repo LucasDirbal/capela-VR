@@ -1,6 +1,14 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import sqlite3
+import logging
 from datetime import datetime, timedelta, date
+
+# --- CONFIGURAÇÃO DE LOGS ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S'
+)
 
 app = Flask(__name__)
 app.secret_key = "chave_mestra_capela" 
@@ -14,10 +22,12 @@ def get_db():
 def init_db():
     with get_db() as db:
         c = db.cursor()
+        # Cria a tabela se ela não existir
         c.execute("""
             CREATE TABLE IF NOT EXISTS pessoas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nome TEXT NOT NULL,
+                login TEXT,
                 senha TEXT DEFAULT '1234',
                 role TEXT DEFAULT 'user',
                 primeiro_login INTEGER DEFAULT 1,
@@ -25,47 +35,106 @@ def init_db():
                 ativo INTEGER DEFAULT 1
             )
         """)
-        # Atualização de colunas para bancos antigos
-        try:
-            c.execute("ALTER TABLE pessoas ADD COLUMN senha TEXT DEFAULT '1234'")
-            c.execute("ALTER TABLE pessoas ADD COLUMN role TEXT DEFAULT 'user'")
-            c.execute("ALTER TABLE pessoas ADD COLUMN primeiro_login INTEGER DEFAULT 1")
-        except: pass
+        
+        # Tenta adicionar as colunas uma por uma (caso a tabela já exista de versões antigas)
+        colunas = [
+            ("login", "TEXT"),
+            ("senha", "TEXT DEFAULT '1234'"),
+            ("role", "TEXT DEFAULT 'user'"),
+            ("primeiro_login", "INTEGER DEFAULT 1")
+        ]
+        
+        for nome_col, tipo_col in colunas:
+            try:
+                c.execute(f"ALTER TABLE pessoas ADD COLUMN {nome_col} {tipo_col}")
+                logging.info(f"Coluna {nome_col} adicionada com sucesso.")
+            except sqlite3.OperationalError:
+                # Se a coluna já existir, o SQLite retorna erro, então apenas ignoramos
+                pass
 
         c.execute("CREATE TABLE IF NOT EXISTS agenda (id INTEGER PRIMARY KEY AUTOINCREMENT, data DATE NOT NULL, pessoa_id INTEGER NOT NULL)")
+        db.commit()
+
+@app.route("/cadastrar", methods=["GET", "POST"])
+def cadastrar():
+    if session.get('role') != 'admin': 
+        return redirect(url_for("login"))
         
-        # Garante que o Lucas seja o Admin mestre (sempre em minúsculo no banco)
-        c.execute("SELECT * FROM pessoas WHERE role = 'admin'")
-        if not c.fetchone():
-            c.execute("INSERT INTO pessoas (nome, senha, role, primeiro_login, ordem) VALUES (?,?,?,?,?)",
-                      ('lucas', '2602dirbal', 'admin', 0, 1))
-        else:
-            # Atualiza caso o admin já exista mas com outro nome/senha
-            c.execute("UPDATE pessoas SET nome = ?, senha = ? WHERE role = 'admin'", ('lucas', '2602dirbal'))
+    if request.method == "POST":
+        # Coleta os dados do formulário
+        nome_agenda = request.form["nome"].strip() # Nome que aparece na escala
+        login_usuario = request.form["login"].strip().lower() # Login (sempre minúsculo)
+        senha_usuario = request.form["senha"].strip()
+        cargo = request.form["role"] # 'admin' ou 'user'
+        
+        with get_db() as db:
+            c = db.cursor()
+            # Pega a próxima ordem para a fila da agenda
+            c.execute("SELECT COALESCE(MAX(ordem), 0) + 1 FROM pessoas")
+            ordem = c.fetchone()[0]
+            
+            # Insere no banco. primeiro_login = 1 faz o sistema pedir troca de senha depois.
+            c.execute("""
+                INSERT INTO pessoas (nome, login, senha, role, primeiro_login, ordem) 
+                VALUES (?, ?, ?, ?, 1, ?)
+            """, (nome_agenda, login_usuario, senha_usuario, cargo, ordem))
+            db.commit()
+            
+        logging.info(f"Admin cadastrou: {nome_agenda} | Login: {login_usuario} | Cargo: {cargo}")
+        return redirect(url_for("pessoas"))
+        
+    return render_template("cadastrar.html")
+
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        # .lower() garante que "Lucas" ou "LUCAS" vire "lucas"
-        nome_input = request.form["nome"].strip().lower()
+        # Padronizamos para 'login_input' aqui
+        login_input = request.form["nome"].strip().lower() 
         senha_input = request.form["senha"]
+        
+        logging.info(f"Tentativa de login: {login_input}")
         
         with get_db() as db:
             c = db.cursor()
-            c.execute("SELECT * FROM pessoas WHERE LOWER(nome) = ?", (nome_input,))
+            # Buscamos agora na coluna 'login'
+            c.execute("SELECT * FROM pessoas WHERE LOWER(login) = ?", (login_input,))
             user = c.fetchone()
             
             if user and user['senha'] == senha_input:
                 if user['primeiro_login'] == 1:
+                    logging.info(f"Usuario {login_input} precisa mudar a senha.")
                     session['temp_user_id'] = user['id']
                     return render_template("mudar_senha.html", nome=user['nome'])
                 
                 session['user_id'] = user['id']
-                session['nome'] = user['nome']
+                session['nome'] = user['nome'] # Nome que vai aparecer na tela (ex: Lucas)
                 session['role'] = user['role']
+                logging.info(f"Login bem-sucedido: {login_input}")
                 return redirect(url_for("agenda"))
-        return "Login inválido! Tente novamente."
+        
+        # Se chegou aqui, o login falhou
+        logging.warning(f"Falha de login para: {login_input}")
+        return "Login inválido! Verifique seu usuário e senha."
+    
     return render_template("login.html")
+@app.route("/atrasar", methods=["POST"])
+def atrasar():
+    if session.get('role') != 'admin': 
+        return redirect(url_for("login"))
+
+    dias = int(request.form.get("dias", 1))
+    data_clicada = request.form.get("data_clicada") # Pegamos a data da linha onde clicou
+    
+    with get_db() as db:
+        c = db.cursor()
+        # O comando agora empurra todas as datas iguais ou maiores que a data selecionada
+        c.execute("UPDATE agenda SET data = date(data, '+' || ? || ' day') WHERE data >= ?", (dias, data_clicada))
+        db.commit()
+    
+    logging.info(f"Agenda atrasada em {dias} dias a partir de {data_clicada}.")
+    return redirect(url_for("agenda"))
 
 @app.route("/mudar_senha", methods=["POST"])
 def mudar_senha():
@@ -75,12 +144,14 @@ def mudar_senha():
         with get_db() as db:
             c = db.cursor()
             c.execute("UPDATE pessoas SET senha = ?, primeiro_login = 0 WHERE id = ?", (nova_senha, user_id))
+        logging.info(f"ID {user_id} alterou a senha padrão.")
         session.pop('temp_user_id', None)
-        return "Senha alterada! <a href='/login'>Clique aqui para logar</a>"
+        return "Senha alterada! <a href='/login'>Fazer Login</a>"
     return redirect(url_for("login"))
 
 @app.route("/logout")
 def logout():
+    logging.info(f"Usuário {session.get('nome')} saiu.")
     session.clear()
     return redirect(url_for("login"))
 
@@ -98,25 +169,15 @@ def agenda():
 
 @app.route("/pessoas")
 def pessoas():
-    if session.get('role') != 'admin': return redirect(url_for("login"))
+    if session.get('role') != 'admin': 
+        logging.warning(f"Acesso negado em /pessoas para {session.get('nome')}")
+        return redirect(url_for("login"))
     with get_db() as db:
         c = db.cursor()
         c.execute("SELECT * FROM pessoas ORDER BY ordem")
         lista = c.fetchall()
     return render_template("pessoas.html", pessoas=lista)
 
-@app.route("/cadastrar", methods=["GET", "POST"])
-def cadastrar():
-    if session.get('role') != 'admin': return redirect(url_for("login"))
-    if request.method == "POST":
-        nome = request.form["nome"].strip().lower() # Salva sempre em minúsculo
-        with get_db() as db:
-            c = db.cursor()
-            c.execute("SELECT COALESCE(MAX(ordem), 0) + 1 FROM pessoas")
-            ordem = c.fetchone()[0]
-            c.execute("INSERT INTO pessoas (nome, ordem) VALUES (?, ?)", (nome, ordem))
-        return redirect(url_for("pessoas"))
-    return render_template("cadastrar.html")
 
 @app.route("/remover_pessoa/<int:id>")
 def remover_pessoa(id):
@@ -125,24 +186,35 @@ def remover_pessoa(id):
             c = db.cursor()
             c.execute("DELETE FROM pessoas WHERE id = ?", (id,))
             c.execute("DELETE FROM agenda WHERE pessoa_id = ?", (id,))
+        logging.info(f"Admin removeu ID {id}")
     return redirect(url_for("pessoas"))
 
-@app.route("/mover_pessoa/<int:id>/<direcao>")
-def mover_pessoa(id, direcao):
-    if session.get('role') != 'admin': return redirect(url_for("login"))
+@app.route("/editar_pessoa/<int:id>", methods=["GET", "POST"])
+def editar_pessoa(id):
+    if session.get('role') != 'admin': 
+        return redirect(url_for("login"))
+    
     with get_db() as db:
         c = db.cursor()
-        c.execute("SELECT ordem FROM pessoas WHERE id = ?", (id,))
-        ordem_atual = c.fetchone()['ordem']
-        if direcao == "subir":
-            c.execute("SELECT id, ordem FROM pessoas WHERE ordem < ? ORDER BY ordem DESC LIMIT 1", (ordem_atual,))
-        else:
-            c.execute("SELECT id, ordem FROM pessoas WHERE ordem > ? ORDER BY ordem ASC LIMIT 1", (ordem_atual,))
-        outro = c.fetchone()
-        if outro:
-            c.execute("UPDATE pessoas SET ordem = ? WHERE id = ?", (outro['ordem'], id))
-            c.execute("UPDATE pessoas SET ordem = ? WHERE id = ?", (ordem_atual, outro['id']))
-    return redirect(url_for("pessoas"))
+        if request.method == "POST":
+            nome = request.form["nome"].strip()
+            login_user = request.form["login"].strip().lower()
+            role = request.form["role"]
+            
+            c.execute("""
+                UPDATE pessoas 
+                SET nome = ?, login = ?, role = ? 
+                WHERE id = ?
+            """, (nome, login_user, role, id))
+            db.commit()
+            logging.info(f"Admin editou ID {id}: {nome} ({login_user})")
+            return redirect(url_for("pessoas"))
+        
+        # Busca os dados atuais para preencher o formulário
+        c.execute("SELECT * FROM pessoas WHERE id = ?", (id,))
+        pessoa = c.fetchone()
+    
+    return render_template("editar_pessoa.html", p=pessoa)
 
 @app.route("/gerar")
 def gerar_agenda():
@@ -157,16 +229,7 @@ def gerar_agenda():
             for i in range(90):
                 c.execute("INSERT INTO agenda (data, pessoa_id) VALUES (?, ?)", (data_corrida.strftime("%Y-%m-%d"), lista[i % len(lista)]))
                 data_corrida += timedelta(days=1)
-    return redirect(url_for("agenda"))
-
-@app.route("/atrasar", methods=["POST"])
-def atrasar():
-    if session.get('role') != 'admin': return redirect(url_for("login"))
-    dias = int(request.form["dias"])
-    hoje = date.today().strftime("%Y-%m-%d")
-    with get_db() as db:
-        c = db.cursor()
-        c.execute("UPDATE agenda SET data = date(data, '+' || ? || ' day') WHERE data >= ?", (dias, hoje))
+    logging.info("Agenda gerada para 90 dias.")
     return redirect(url_for("agenda"))
 
 if __name__ == "__main__":
