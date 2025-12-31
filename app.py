@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, session, flash
+from datetime import datetime, timedelta, date
 import sqlite3
 import logging
-from datetime import datetime, timedelta, date
 
 # --- CONFIGURAÇÃO DE LOGS ---
 logging.basicConfig(
@@ -48,7 +48,7 @@ def agenda():
     with get_db() as db:
         c = db.cursor()
         
-        # Busca a agenda. O dia de entrega é a data da agenda + 1 dia
+        # SQL com data de recebimento e entrega
         c.execute("""
             SELECT 
                 agenda.id, 
@@ -64,17 +64,34 @@ def agenda():
         dados = c.fetchall()
 
         if session.get('user_id'):
+            # Busca a data do usuário logado que seja HOJE ou no FUTURO
             c.execute("""
                 SELECT data FROM agenda 
                 WHERE pessoa_id = ? AND data >= ? 
                 ORDER BY data ASC LIMIT 1
             """, (session['user_id'], hoje_str))
             res = c.fetchone()
+            
             if res:
                 proxima_data_obj = datetime.strptime(res['data'], "%Y-%m-%d").date()
                 dias_faltando = (proxima_data_obj - hoje_dt).days
 
-    return render_template("agenda.html", agenda=dados, hoje=hoje_str, dias_faltando=dias_faltando, proxima_data=proxima_data_obj)
+    esta_comigo = session.get(f"comigo_{hoje_str}_{session.get('user_id')}", False)
+
+    return render_template("agenda.html", 
+                           agenda=dados, 
+                           hoje=hoje_str, 
+                           dias_faltando=dias_faltando, 
+                           proxima_data=proxima_data_obj,
+                           esta_comigo=esta_comigo)
+
+@app.route("/confirmar_recebimento", methods=["POST"])
+def confirmar_recebimento():
+    hoje_str = date.today().strftime("%Y-%m-%d")
+    # Salva na sessão que o usuário já recebeu a capela hoje
+    session[f"comigo_{hoje_str}_{session.get('user_id')}"] = True
+    flash("Que bom! Aproveite este momento com a Capela ✝️", "success")
+    return redirect(url_for("agenda"))
 
 # --- SISTEMA DE LOGIN E SENHA ---
 @app.route("/login", methods=["GET", "POST"])
@@ -123,15 +140,34 @@ def logout():
 # --- GESTÃO DA AGENDA (ATRASAR / GERAR) ---
 @app.route("/atrasar", methods=["POST"])
 def atrasar():
-    if not session.get('user_id'): return redirect(url_for("login"))
+    user_id = session.get('user_id')
+    user_role = session.get('role')
+    
+    # Verifica se o usuário está logado
+    if not user_id: 
+        return redirect(url_for("login"))
+        
     dias = int(request.form.get("dias", 1))
     data_clicada = request.form.get("data_clicada")
+    
     with get_db() as db:
         c = db.cursor()
-        c.execute("UPDATE agenda SET data = date(data, '+' || ? || ' day') WHERE data >= ?", (dias, data_clicada))
-        db.commit()
-    flash("Agenda atualizada!", "success")
+        
+        # Busca quem é o dono desta data na agenda
+        c.execute("SELECT pessoa_id FROM agenda WHERE data = ?", (data_clicada,))
+        registro = c.fetchone()
+        
+        if registro:
+            # SÓ ADMIN ou o PRÓPRIO DONO da data podem atrasar
+            if registro['pessoa_id'] == user_id or user_role == 'admin':
+                c.execute("UPDATE agenda SET data = date(data, '+' || ? || ' day') WHERE data >= ?", (dias, data_clicada))
+                db.commit()
+                flash("Escala atualizada com sucesso!", "success")
+            else:
+                flash("Você não tem permissão para atrasar a escala de outra pessoa.", "danger")
+                
     return redirect(url_for("agenda"))
+
 
 @app.route("/gerar")
 def gerar_agenda():
